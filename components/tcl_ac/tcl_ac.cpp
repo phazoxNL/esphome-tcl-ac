@@ -7,6 +7,25 @@ namespace tcl_ac {
 
 static const char *const TAG = "tcl_ac";
 
+// added void for switchable booleans in Home assistant for beeper and display
+void TclAcClimate::set_display_state(bool state) {
+  this->display_enabled_ = state;
+  if (this->force_mode_ && this->allow_send_) {
+    uint8_t packet[SET_PACKET_SIZE];
+    this->create_set_packet_(packet);
+    this->send_packet_(packet, SET_PACKET_SIZE);
+  }
+}
+
+void TclAcClimate::set_beeper_state(bool state) {
+  this->beeper_enabled_ = state;
+  if (this->force_mode_ && this->allow_send_) {
+    uint8_t packet[SET_PACKET_SIZE];
+    this->create_set_packet_(packet);
+    this->send_packet_(packet, SET_PACKET_SIZE);
+  }
+}
+
 void TclAcClimate::setup() {
   // Initialize with defaults
   this->mode = climate::CLIMATE_MODE_OFF;
