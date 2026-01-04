@@ -12,7 +12,7 @@ DEPENDENCIES = ["uart"]
 from . import tcl_ac_ns, TclAcClimate, CONF_BEEPER, CONF_DISPLAY, CONF_VERTICAL_DIRECTION, CONF_HORIZONTAL_DIRECTION
 
 # Climate platform schema
-CONFIG_SCHEMA = climate.CLIMATE_SCHEMA.extend(
+CONFIG_SCHEMA = climate._CLIMATE_SCHEMA.extend(
     {
         cv.GenerateID(): cv.declare_id(TclAcClimate),
         cv.Optional(CONF_BEEPER, default=True): cv.boolean,
