@@ -670,31 +670,33 @@ void TclAcClimate::parse_status_packet_(const uint8_t *data, size_t length) {
     ESP_LOGD(TAG, "AC changed QUIET mode to: %s", quiet_on ? "ON" : "OFF");
   }
   
-  // Temperature parsing (FIXED: validated from direct UART analysis)
-  // STATUS response structure:
-  //   - Packet bytes 0-4: Header (BB 01 00 04 37)
-  //   - Packet bytes 5-59: Payload (55 bytes, mapped as data[0] to data[54])
-  //   - Packet byte 60: Checksum
-  // Temperature is at PACKET byte 35 = PAYLOAD data[30] (35 - 5 = 30)
-  // 
-  // UPDATE: Now reading CURRENT temperature from AC (room temp sensor)
-  // Formula: raw - 127 (works for ~36% of STATUS packets)
-  // Analysis showed values are usually 137-157 for 10-30°C range
-  // But some packets use byte[30] for other purposes, so we filter those out
-  if (length >= 55) {
-    uint8_t ac_temp_raw = data[30];
-    
-    // Only process if raw value suggests temperature (not control/status data)
-    // Valid temp range: raw 137-157 → 10-30°C after (raw - 127)
-    // Filter out obvious non-temperature values like 0x00-0x80, 0xFF, etc.
-    if (ac_temp_raw >= 130 && ac_temp_raw <= 160) {
-      float ac_temp = this->raw_to_celsius_(ac_temp_raw);
-      ESP_LOGD(TAG, "AC current room temp from byte[30]: raw=0x%02X, temp=%.1f°C", 
-               ac_temp_raw, ac_temp);
-      this->current_temperature = ac_temp;
-    } else {
-      ESP_LOGV(TAG, "AC temp byte[30] not temperature data: raw=0x%02X (cmd 0x%02X)", 
-               ac_temp_raw, data[3]);  // Log command type for analysis
+ // Temperature parsing
+  // PACKET bytes [17:18] using:  (((raw16)/374 - 32) / 1.8)
+  //   // In this parser, "data" points to payload starting at PACKET byte 5, so:
+  //   PACKET[17] -> data[12]
+  //   PACKET[18] -> data[13]
+  // This method is preferred because it is stable across mode/power changes.
+  bool got_room_temp = false;
+  if (length >= 14) {
+    const uint16_t raw16 = ((uint16_t) data[12] << 8) | data[13];
+    const float room_c = (((float) raw16 / 374.0f) - 32.0f) / 1.8f;
+    if (room_c > -10.0f && room_c < 60.0f) {
+      this->current_temperature = room_c;
+      got_room_temp = true;
+      ESP_LOGD(TAG, "Room temperature (16-bit) data[12:13]=0x%02X%02X raw=%u -> %.1f°C",
+               data[12], data[13], raw16, room_c);
+    }
+  }
+
+  // Fallback (older single-byte heuristic)
+  if (!got_room_temp && length >= 55) {
+    const uint8_t ac_temp_raw = data[30];
+    if (ac_temp_raw >= 120 && ac_temp_raw <= 180) {
+      const float ac_temp = this->raw_to_celsius_(ac_temp_raw);
+      if (ac_temp > -10.0f && ac_temp < 60.0f) {
+        this->current_temperature = ac_temp;
+        ESP_LOGD(TAG, "Room temperature (fallback byte[30]) raw=0x%02X -> %.1f°C", ac_temp_raw, ac_temp);
+      }
     }
   }
   
@@ -710,15 +712,25 @@ void TclAcClimate::parse_temp_response_(const uint8_t *data, size_t length) {
     return;
   }
   
-  // Byte 0: Current temperature (raw - 7 = Celsius)
-  // Byte 2: Target temperature (raw - 12 = Celsius)
-  uint8_t current_raw = data[0];
-  
-  if (current_raw > 7) {
-    this->current_temperature = this->raw_to_celsius_(current_raw);
-    ESP_LOGD(TAG, "Current temperature: %.1f°C (raw: 0x%02X)", this->current_temperature, current_raw);
-    this->publish_state();
+// TEMP_RESPONSE encoding differs from STATUS.
+  // Byte 0: current temperature (raw - 7)
+  // Byte 2: target temperature  (raw - 12)
+  const uint8_t current_raw = data[0];
+  const uint8_t target_raw = data[2];
+
+  const float current_c = ((float) current_raw) - 7.0f;
+  if (current_c > -10.0f && current_c < 60.0f) {
+    this->current_temperature = current_c;
+    ESP_LOGD(TAG, "TEMP_RESPONSE current: raw=0x%02X -> %.1f°C", current_raw, current_c);
   }
+
+  const float target_c = ((float) target_raw) - 12.0f;
+  if (target_c > 10.0f && target_c < 40.0f) {
+    this->target_temperature = target_c;
+    ESP_LOGD(TAG, "TEMP_RESPONSE target: raw=0x%02X -> %.1f°C", target_raw, target_c);
+  }
+
+  this->publish_state();
 }
 
 void TclAcClimate::parse_power_response_(const uint8_t *data, size_t length) {
