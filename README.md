@@ -7,7 +7,7 @@ Custom ESPHome component for controlling TCL air conditioners via UART (Realtek 
 ✅ **Complete Protocol Implementation** (validated from real UART logs)
 - All climate modes: Cool, Heat, Dry, Fan, Auto
 - Fan speeds: Auto, Low, Medium, High (with Quiet and Turbo presets)
-- Temperature control: 16°C - 32°C
+- Temperature control: 16°C - 31°C (changed from 32°C to 31°C most tested TCL ac reverts back to 16°C when setting at 32°C)
 - Swing control: Vertical, Horizontal, Both
 - Special modes: ECO, Turbo (Boost), Quiet (Comfort), Sleep, Health
 - Display and Beeper control
