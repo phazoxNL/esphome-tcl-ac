@@ -154,7 +154,7 @@ climate::ClimateTraits TclAcClimate::traits() {
   
   // Temperature range (from log: 18°C - 30°C observed)
   traits.set_visual_min_temperature(16.0f);
-  traits.set_visual_max_temperature(32.0f);
+  traits.set_visual_max_temperature(31.0f);
   traits.set_visual_temperature_step(1.0f);
   traits.set_supports_current_temperature(true);
   
